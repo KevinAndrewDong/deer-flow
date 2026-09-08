@@ -32,6 +32,9 @@ _BOLD_HEADING_RE = re.compile(r"^\*\*((ITEM|PART|SECTION|SCHEDULE|EXHIBIT|APPEND
 #      the regex linear and avoid ReDoS on attacker-controlled content
 _SPLIT_BOLD_HEADING_RE = re.compile(r"^\*\*[\dA-Z][\d\.]*\*\*\s+\*\*(?!\d[\d\s.,\-–—/:()%]*\*\*)[^*]+\*\*(?:\s+\*\*[^*]+\*\*){0,2}\s*$")
 
+_FENCE_OPEN_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+_FENCE_CLOSE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*$")
+
 # Maximum number of outline entries injected into the agent context.
 # Keeps prompt size bounded even for very long documents.
 MAX_OUTLINE_ENTRIES = 50
@@ -63,7 +66,8 @@ def _clean_bold_title(raw: str) -> str:
 def extract_outline(md_path: Path) -> list[dict]:
     """Extract document outline (headings) from a Markdown file.
 
-    Recognises three heading styles produced by pymupdf4llm:
+    Recognises three heading styles produced by pymupdf4llm outside fenced
+    code blocks:
 
     1. Standard Markdown headings: lines starting with one or more '#'.
        Inline ``**...**`` wrappers and adjacent bold spans (``** **``) are
@@ -88,9 +92,26 @@ def extract_outline(md_path: Path) -> list[dict]:
         Returns an empty list if the file cannot be read or has no headings.
     """
     outline: list[dict] = []
+    fence_char: str | None = None
+    fence_length = 0
     try:
         with md_path.open(encoding="utf-8") as f:
             for lineno, line in enumerate(f, 1):
+                physical_line = line.rstrip("\r\n")
+                if fence_char is not None:
+                    if m := _FENCE_CLOSE_RE.match(physical_line):
+                        marker = m.group(1)
+                        if marker[0] == fence_char and len(marker) >= fence_length:
+                            fence_char = None
+                    continue
+
+                if m := _FENCE_OPEN_RE.match(physical_line):
+                    marker, info = m.groups()
+                    if marker[0] == "~" or "`" not in info:
+                        fence_char = marker[0]
+                        fence_length = len(marker)
+                        continue
+
                 stripped = line.strip()
                 if not stripped:
                     continue

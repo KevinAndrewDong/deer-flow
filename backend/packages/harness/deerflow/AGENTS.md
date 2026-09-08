@@ -130,6 +130,11 @@ bytes), not logged mount failures (missing paths, SDK errors). A provider-level
 map preserves creation results within the Gateway process; ``None`` on a
 reclaimed sandbox means unavailable.
 
+Uploaded Markdown outlines skip backtick and tilde fenced code blocks using
+CommonMark fence character, minimum-length, indentation, and closing-length
+rules. Keep physical line numbers and the bounded heading limit covered in
+`tests/test_file_conversion.py`.
+
 ### Workspace Snapshot Cancellation (`workspace_changes/recorder.py`)
 
 After `_prepare_capture()` hands off roots, cancellation must drain text scans

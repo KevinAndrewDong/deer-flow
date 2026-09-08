@@ -7,6 +7,8 @@ import sys
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from deerflow.utils.file_conversion import (
     _ASYNC_THRESHOLD_BYTES,
     _MIN_CHARS_PER_PAGE,
@@ -348,6 +350,32 @@ class TestExtractOutline:
         assert outline[0] == {"title": "Chapter One", "line": 1}
         assert outline[1] == {"title": "Section 1.1", "line": 5}
         assert outline[2] == {"title": "Sub 1.1.1", "line": 9}
+
+    @pytest.mark.parametrize("fence", ["```", "~~~"])
+    def test_fenced_code_headings_are_ignored(self, tmp_path, fence):
+        md = tmp_path / "guide.md"
+        md.write_text(
+            f"# Before\n{fence}python\n# code comment\n**ITEM 1. CODE**\n{fence}\n# After\n",
+            encoding="utf-8",
+        )
+
+        assert extract_outline(md) == [
+            {"title": "Before", "line": 1},
+            {"title": "After", "line": 6},
+        ]
+
+    def test_fenced_code_comments_do_not_exhaust_outline_limit(self, tmp_path):
+        md = tmp_path / "guide.md"
+        comments = "".join(f"# code comment {i}\n" for i in range(MAX_OUTLINE_ENTRIES + 1))
+        md.write_text(f"```python\n{comments}```\n# Actual findings\n", encoding="utf-8")
+
+        assert extract_outline(md) == [{"title": "Actual findings", "line": 54}]
+
+    def test_shorter_or_unclosed_fences_keep_content_hidden(self, tmp_path):
+        md = tmp_path / "guide.md"
+        md.write_text("````python\n# hidden\n```\n# still hidden\n````\n# Visible\n~~~\n# also hidden\n", encoding="utf-8")
+
+        assert extract_outline(md) == [{"title": "Visible", "line": 6}]
 
     def test_bold_sec_item_heading(self, tmp_path):
         """**ITEM N. TITLE** lines in SEC filings are recognised."""
